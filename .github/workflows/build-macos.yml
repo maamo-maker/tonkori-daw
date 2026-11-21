@@ -1,0 +1,91 @@
+name: Build macOS app
+
+# Every push to main builds Tonkori DAW for Apple Silicon (macOS 13+) and
+# publishes it as a downloadable release.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-macos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore pinned engine + JUCE
+        id: deps-cache
+        uses: actions/cache@v4
+        with:
+          path: libs
+          key: deps-${{ hashFiles('deps.lock') }}
+
+      - name: Fetch pinned engine + JUCE
+        if: steps.deps-cache.outputs.cache-hit != 'true'
+        run: bash scripts/fetch-deps.sh
+
+      - name: Compiler cache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: macos-arm64-release
+          max-size: 2G
+
+      - name: Configure
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0 \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build
+        run: cmake --build build --config Release --target TonkoriDAW -j 4
+
+      - name: Sign (ad-hoc) and package
+        id: pkg
+        run: |
+          APP=$(find build -name "Tonkori DAW.app" -type d -maxdepth 4 | head -1)
+          echo "App: $APP"
+          codesign --force --deep --sign - "$APP"
+          codesign --verify --verbose "$APP"
+          /usr/libexec/PlistBuddy -c "Print :LSMinimumSystemVersion" "$APP/Contents/Info.plist" || true
+          lipo -info "$APP/Contents/MacOS/Tonkori DAW"
+          VERSION=$(grep -m1 "project(TonkoriDAW VERSION" CMakeLists.txt | sed -E 's/.*VERSION ([0-9.]+).*/\1/')
+          NAME="Tonkori-DAW-${VERSION}-build${{ github.run_number }}-macOS-arm64.zip"
+          ditto -c -k --keepParent "$APP" "$NAME"
+          echo "zip=$NAME" >> "$GITHUB_OUTPUT"
+          echo "tag=v${VERSION}-build${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tonkori-daw-macos-arm64
+          path: ${{ steps.pkg.outputs.zip }}
+          retention-days: 30
+
+      - name: Publish release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.pkg.outputs.tag }}
+          name: Tonkori DAW ${{ steps.pkg.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          make_latest: true
+          files: ${{ steps.pkg.outputs.zip }}
+          body: |
+            Apple Silicon build for macOS 13 (Ventura) and later.
+            Commit: ${{ github.sha }}
+
+            First launch: unzip, move "Tonkori DAW" to Applications, open it once.
+            If macOS blocks it, go to System Settings → Privacy & Security and click "Open Anyway".

@@ -1,0 +1,4 @@
+# Pinned dependencies. CI and local builds clone exactly these commits into libs/.
+# name  url  commit
+tracktion_engine https://github.com/Tracktion/tracktion_engine.git be4a6a0c94cc59ebe6f7a0a02373567cb2c01cfb
+juce https://github.com/juce-framework/JUCE.git 7ff644f65d7daa1428c34b9738ebb5c449dc9172

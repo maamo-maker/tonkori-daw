@@ -1,0 +1,6 @@
+libs/
+build/
+build-*/
+.DS_Store
+*.tracktionedit.bak
+*.log
