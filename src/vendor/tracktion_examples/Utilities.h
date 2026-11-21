@@ -200,7 +200,7 @@ namespace EngineHelpers
         auto& transport = edit.getTransport();
 
         if (transport.isRecording())
-            transport.stop (true, false);
+            transport.stop (false, false);   // Tonkori: keep the take (upstream discards it)
         else
             transport.record (false);
     }

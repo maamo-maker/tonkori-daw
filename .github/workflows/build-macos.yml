@@ -50,7 +50,13 @@ jobs:
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
       - name: Build
-        run: cmake --build build --config Release --target TonkoriDAW -j 4
+        run: cmake --build build --config Release --target TonkoriDAW TonkoriSelfTest -j 4
+
+      - name: Engine self-test (null test + DSD decode accuracy)
+        run: |
+          T=$(find build -name TonkoriSelfTest -type f -perm -u+x | head -1)
+          "$T" 2>&1 | grep -vE "MIDI|^Audio|Rebuilding|Wave |Default Wave|Settings file|Creating Default|Cleaning up" | tee selftest.txt
+          grep -q "ALL PASS" selftest.txt
 
       - name: Sign (ad-hoc) and package
         id: pkg
@@ -82,7 +88,9 @@ jobs:
           name: Tonkori DAW ${{ steps.pkg.outputs.tag }}
           target_commitish: ${{ github.sha }}
           make_latest: true
-          files: ${{ steps.pkg.outputs.zip }}
+          files: |
+            ${{ steps.pkg.outputs.zip }}
+            selftest.txt
           body: |
             Apple Silicon build for macOS 13 (Ventura) and later.
             Commit: ${{ github.sha }}

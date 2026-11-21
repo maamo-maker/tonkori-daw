@@ -298,9 +298,21 @@ void ClipComponent::paint (Graphics& g)
     }
 }
 
-void ClipComponent::mouseDown (const MouseEvent&)
+void ClipComponent::mouseDown (const MouseEvent& e)
 {
-    editViewState.selectionManager.selectOnly (clip.get());
+    // Tonkori: Live-style multi-select (Cmd-click / Shift-click add to selection)
+    if (e.mods.isCommandDown() || e.mods.isShiftDown())
+        editViewState.selectionManager.addToSelection (clip.get());
+    else if (! editViewState.selectionManager.isSelected (clip.get()))
+        editViewState.selectionManager.selectOnly (clip.get());
+
+    // Clicking a clip also places the insert marker there while stopped.
+    auto& transport = clip->edit.getTransport();
+    if (! transport.isPlaying() && getParentComponent() != nullptr)
+    {
+        auto pos = e.getEventRelativeTo (getParentComponent()).position;
+        transport.setPosition (editViewState.xToTime ((int) pos.x, getParentComponent()->getWidth()));
+    }
 }
 
 //==============================================================================
@@ -972,9 +984,14 @@ void TrackComponent::paint (Graphics& g)
     }
 }
 
-void TrackComponent::mouseDown (const MouseEvent&)
+void TrackComponent::mouseDown (const MouseEvent& e)
 {
     editViewState.selectionManager.selectOnly (track.get());
+
+    // Tonkori: clicking empty track space sets the insert marker (Live behaviour).
+    auto& transport = track->edit.getTransport();
+    if (! transport.isPlaying())
+        transport.setPosition (editViewState.xToTime (e.x, getWidth()));
 }
 
 void TrackComponent::changeListenerCallback (ChangeBroadcaster*)

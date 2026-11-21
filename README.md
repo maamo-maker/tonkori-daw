@@ -24,9 +24,28 @@ The new idea is **transparent-until-touched decomposition**. The original PCM is
 
 Untouched audio stays bit-identical, so null tests pass. Artifacts can only appear where something was actually edited.
 
+## Engine: the Pyramix profile
+
+Pyramix processes in 32-bit floating point. MassCore is Merging's Windows real-time scheduler, not a different "sound". On macOS, Tonkori matches the engine's behaviour:
+
+- **32-bit float** processing end to end, the same format as Pyramix.
+- **Recording** as 32-bit float WAV at the device rate, up to 384 kHz / DXD. Takes go in `<Session> Audio/`.
+- **Real-time threads joined to Core Audio's audio workgroup** (macOS's mechanism for scheduling helper threads against the device deadline on performance cores), using a spin-based real-time thread pool. This is the counterpart of MassCore's dedicated cores.
+- **Unity path:** master at 0 dB (Tracktion defaults to −3 dB), linear pan law (0 dB at centre), no automatic clip fades. An untouched clip renders **bit-identical**.
+- **DSD:** DSF and DSDIFF (DSD64/128/256) import as DXD (352.8 kHz float), the way Pyramix edits DSD. The decoder uses a 48·D-tap Kaiser FIR (≈120 dB stop band, −6 dB at 148 kHz). Group delay is compensated so the decoded audio lines up with the DSD sample-accurately. 100% modulation maps to ±1.0, so SACD 0 dB sits at −6 dBFS.
+- **RAVENNA / AES67:** on a Mac this goes through Merging's Virtual Audio Device. Tonkori sees it as a Core Audio device, up to DXD and DSD256 rates.
+- **Export:** WAV 32-bit float, or 24/16-bit with TPDF dither.
+
+`tests/EngineSelfTest.cpp` proves these claims on every build. Its results ship with each release as `selftest.txt`.
+
+## Shortcuts
+
+Ableton Live 12 key map: see [docs/SHORTCUTS.md](docs/SHORTCUTS.md).
+
 ## Milestones
 
-- **M0, walking skeleton** (this build): arrangement, transport, recording, audio import, AU/VST3 hosting, device settings, session save/load.
+- **M0, walking skeleton** (build 1): arrangement, transport, recording, audio import, AU/VST3 hosting, device settings, session save/load.
+- **M0.2** (this build): Ableton Live 12 key map and menu bar, Pyramix-profile engine, DSD→DXD import, audio export, engine self-test.
 - **M1, spine:** Tonkori's own timeline and track model, uniform tracks, routing matrix, high sample rates.
 - **M2, edit grammar:** edit modes, playlists/comping, 3- and 4-point source–destination editing.
 - **M3, launcher:** clip-grid view on the same clips.

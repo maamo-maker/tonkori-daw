@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.22)
 # macOS 13 (Ventura) is the oldest system this app must run on.
 set(CMAKE_OSX_DEPLOYMENT_TARGET "13.0" CACHE STRING "Minimum macOS version")
 
-project(TonkoriDAW VERSION 0.1.0 LANGUAGES C CXX)
+project(TonkoriDAW VERSION 0.2.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -29,7 +29,9 @@ juce_add_gui_app(TonkoriDAW
 
 juce_generate_juce_header(TonkoriDAW)
 
-target_sources(TonkoriDAW PRIVATE src/Main.cpp)   # includes MainComponent.cpp (single TU)
+target_sources(TonkoriDAW PRIVATE
+    src/Main.cpp              # includes MainComponent.cpp (single TU)
+    src/dsd/DsdDecoder.cpp)
 
 target_include_directories(TonkoriDAW PRIVATE src src/vendor/tracktion_examples)
 
@@ -66,4 +68,28 @@ endif()
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "GNU")
     target_compile_options(TonkoriDAW PRIVATE -Wno-unknown-pragmas)
+endif()
+
+#==============================================================================
+# Headless engine self-test: null test + DSD accuracy. Runs in CI on macOS.
+option(TONKORI_BUILD_TESTS "Build the engine self-test" ON)
+
+if (TONKORI_BUILD_TESTS)
+    juce_add_console_app(TonkoriSelfTest PRODUCT_NAME "TonkoriSelfTest")
+    juce_generate_juce_header(TonkoriSelfTest)
+    target_sources(TonkoriSelfTest PRIVATE tests/EngineSelfTest.cpp src/dsd/DsdDecoder.cpp)
+    target_include_directories(TonkoriSelfTest PRIVATE src)
+    target_compile_definitions(TonkoriSelfTest PRIVATE
+        JUCE_PLUGINHOST_AU=0 JUCE_PLUGINHOST_VST3=0 JUCE_USE_CURL=0 JUCE_WEB_BROWSER=0
+        JUCE_MODAL_LOOPS_PERMITTED=1 JUCE_STRICT_REFCOUNTEDPOINTER=1)
+    target_link_libraries(TonkoriSelfTest PRIVATE
+        tracktion::tracktion_core tracktion::tracktion_engine tracktion::tracktion_graph
+        juce::juce_audio_devices juce::juce_audio_processors juce::juce_audio_utils
+        juce::juce_recommended_config_flags)
+    if (APPLE)
+        target_compile_options(TonkoriSelfTest PRIVATE "-fno-aligned-allocation")
+    endif()
+    if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        target_link_libraries(TonkoriSelfTest PRIVATE "-latomic")
+    endif()
 endif()
