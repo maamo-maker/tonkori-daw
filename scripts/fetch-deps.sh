@@ -24,4 +24,12 @@ clone_at () {
 
 clone_at "$TE_URL"   "$TE_REV"   libs/tracktion_engine
 clone_at "$JUCE_URL" "$JUCE_REV" libs/tracktion_engine/modules/juce
+
+# Tonkori engine patches: reset to the pinned tree, then apply every patch in order.
+git -C libs/tracktion_engine checkout -q -- .
+for p in patches/*.patch; do
+    [ -e "$p" ] || continue
+    echo "applying $p"
+    git -C libs/tracktion_engine apply --whitespace=nowarn "$PWD/$p"
+done
 echo "deps ready"

@@ -11,9 +11,25 @@ public:
     const juce::String getApplicationVersion() override { return ProjectInfo::versionString; }
     bool moreThanOneInstanceAllowed() override          { return false; }
 
-    void initialise (const juce::String&) override
+    void initialise (const juce::String& commandLine) override
     {
         mainWindow = std::make_unique<MainWindow> (*this);
+        importFromCommandLine (commandLine);
+    }
+
+    void anotherInstanceStarted (const juce::String& commandLine) override { importFromCommandLine (commandLine); }
+
+    void importFromCommandLine (const juce::String& commandLine)
+    {
+        juce::StringArray files;
+        for (auto& a : juce::StringArray::fromTokens (commandLine, true))
+        {
+            juce::File f (a.unquoted());
+            if (a.isNotEmpty() && ! a.startsWith ("-") && f.existsAsFile()) files.add (f.getFullPathName());
+        }
+        if (files.isEmpty() || mainWindow == nullptr) return;
+        if (auto* mc = dynamic_cast<MainComponent*> (mainWindow->getContentComponent()))
+            mc->importFiles (files, te::TimePosition(), te::getAudioTracks (*mc->getEditForTesting()).getFirst());
     }
 
     void shutdown() override { mainWindow = nullptr; }

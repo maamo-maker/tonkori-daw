@@ -1,6 +1,7 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include "model/ClipFades.h"
 
 namespace te = tracktion;
 
@@ -24,6 +25,12 @@ namespace tonkori
         int getNumberOfCPUsToUseForAudio() override     { return juce::jmax (1, juce::SystemStats::getNumCpus()); }
         bool autoAddClipEdgeFades() override            { return false; }
         bool shouldOpenAudioInputByDefault() override   { return true; }
+
+        // Numeric fade curves, per-clip fade on/off and session auto-fades (engine patch 0001).
+        te::FadeOverride getFadeOverride (const te::AudioClipBase& clip, bool isFadeIn) override
+        {
+            return fades::resolve (clip, isFadeIn);
+        }
 
         // %projectdir% resolves to the session's folder; takes go in "<Session> Audio/".
         juce::String getDefaultAudioRecordingFilePattern() override

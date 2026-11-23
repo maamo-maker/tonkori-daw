@@ -36,6 +36,8 @@ Pyramix processes in 32-bit floating point. MassCore is Merging's Windows real-t
 - **RAVENNA / AES67:** on a Mac this goes through Merging's Virtual Audio Device. Tonkori sees it as a Core Audio device, up to DXD and DSD256 rates.
 - **Export:** WAV 32-bit float, or 24/16-bit with TPDF dither.
 
+Numeric fade curves are applied by a small engine patch (`patches/0001-tonkori-fade-override.patch`): each clip can supply its own fade length and curve table to the engine's fade node.
+
 `tests/EngineSelfTest.cpp` proves these claims on every build. Its results ship with each release as `selftest.txt`.
 
 ## Shortcuts
@@ -45,9 +47,10 @@ Ableton Live 12 key map: see [docs/SHORTCUTS.md](docs/SHORTCUTS.md).
 ## Milestones
 
 - **M0, walking skeleton** (build 1): arrangement, transport, recording, audio import, AU/VST3 hosting, device settings, session save/load.
-- **M0.2** (this build): Ableton Live 12 key map and menu bar, Pyramix-profile engine, DSD→DXD import, audio export, engine self-test.
-- **M1, spine:** Tonkori's own timeline and track model, uniform tracks, routing matrix, high sample rates.
-- **M2, edit grammar:** edit modes, playlists/comping, 3- and 4-point source–destination editing.
+- **M0.2** (build 2): Ableton Live 12 key map and menu bar, Pyramix-profile engine, DSD→DXD import, audio export, engine self-test.
+- **M1, Edit window** (build 3): new interface (transport/tool bars, ruler, track headers, waveform canvas, Inspector, Mixer); Smart Tool, tools and edit modes; time selections; numeric, programmable fades with live on/off and session auto-fades; crossfades from a selection; Spot; Finder drag-and-drop. All of it works while playing or recording. See [docs/FEATURE-MAP.md](docs/FEATURE-MAP.md).
+- **M2, recording and comping:** take lanes and comping, pre/post-roll, count-in, crossfade editor, clip gain line, sends/buses, markers, stems, loudness metering.
+- **M2.5:** 3- and 4-point source–destination editing (Pyramix).
 - **M3, launcher:** clip-grid view on the same clips.
 - **M4, decomposition:** stem separation, note objects, the transparent render rule.
 - **M5, scripting:** action list and a script console.

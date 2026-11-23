@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.22)
 # macOS 13 (Ventura) is the oldest system this app must run on.
 set(CMAKE_OSX_DEPLOYMENT_TARGET "13.0" CACHE STRING "Minimum macOS version")
 
-project(TonkoriDAW VERSION 0.2.0 LANGUAGES C CXX)
+project(TonkoriDAW VERSION 0.3.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -31,7 +31,11 @@ juce_generate_juce_header(TonkoriDAW)
 
 target_sources(TonkoriDAW PRIVATE
     src/Main.cpp              # includes MainComponent.cpp (single TU)
-    src/dsd/DsdDecoder.cpp)
+    src/dsd/DsdDecoder.cpp
+    src/model/FadeSpec.cpp
+    src/ui/ArrangeView.cpp
+    src/ui/Inspector.cpp
+    src/ui/Mixer.cpp)
 
 target_include_directories(TonkoriDAW PRIVATE src src/vendor/tracktion_examples)
 
@@ -77,7 +81,7 @@ option(TONKORI_BUILD_TESTS "Build the engine self-test" ON)
 if (TONKORI_BUILD_TESTS)
     juce_add_console_app(TonkoriSelfTest PRODUCT_NAME "TonkoriSelfTest")
     juce_generate_juce_header(TonkoriSelfTest)
-    target_sources(TonkoriSelfTest PRIVATE tests/EngineSelfTest.cpp src/dsd/DsdDecoder.cpp)
+    target_sources(TonkoriSelfTest PRIVATE tests/EngineSelfTest.cpp src/dsd/DsdDecoder.cpp src/model/FadeSpec.cpp)
     target_include_directories(TonkoriSelfTest PRIVATE src)
     target_compile_definitions(TonkoriSelfTest PRIVATE
         JUCE_PLUGINHOST_AU=0 JUCE_PLUGINHOST_VST3=0 JUCE_USE_CURL=0 JUCE_WEB_BROWSER=0

@@ -30,8 +30,7 @@ jobs:
           path: libs
           key: deps-${{ hashFiles('deps.lock') }}
 
-      - name: Fetch pinned engine + JUCE
-        if: steps.deps-cache.outputs.cache-hit != 'true'
+      - name: Fetch pinned engine + JUCE, apply Tonkori patches
         run: bash scripts/fetch-deps.sh
 
       - name: Compiler cache

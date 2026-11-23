@@ -12,6 +12,7 @@
 #include "EngineProfile.h"
 #include "dsd/DsdDecoder.h"
 #include "TaskRunner.h"
+#include "model/ClipFades.h"
 #include <array>
 #include <map>
 
@@ -325,6 +326,227 @@ static void dsdTest (const juce::File& dir, int multiple)
     }
 }
 
+
+//==============================================================================
+// Fades: every shape rendered through the engine must match its formula sample by sample.
+struct DcEdit
+{
+    std::unique_ptr<te::Edit> edit;
+    te::WaveAudioClip* clip = nullptr;
+};
+
+static DcEdit makeDcEdit (te::Engine& engine, const juce::File& dir, const juce::String& name, double rate, double seconds, float level)
+{
+    const int n = (int) (rate * seconds);
+    juce::AudioBuffer<float> dc (2, n);
+    for (int c = 0; c < 2; ++c) juce::FloatVectorOperations::fill (dc.getWritePointer (c), level, n);
+
+    auto src = dir.getChildFile (name + "_dc.wav");
+    writeWav (src, dc, rate, 32);
+
+    DcEdit d;
+    d.edit = te::createEmptyEdit (engine, dir.getChildFile (name + ".tracktionedit"));
+    d.edit->ensureNumberOfAudioTracks (1);
+    tonkori::EngineProfile::applyToEdit (*d.edit);
+    te::EditFileOperations (*d.edit).save (true, true, false);
+    auto* track = te::getAudioTracks (*d.edit).getFirst();
+    auto c = track->insertWaveClip ("dc", src, { { 0_tp, te::TimePosition::fromSeconds (seconds) }, {} }, false);
+    d.clip = dynamic_cast<te::WaveAudioClip*> (c.get());
+    return d;
+}
+
+static juce::AudioBuffer<float> renderEdit (te::Engine& engine, te::Edit& edit, const juce::File& out, double rate, double seconds)
+{
+    out.deleteFile();
+    te::Renderer::Parameters p (edit);
+    p.tracksToDo = te::toBitSet (te::getAllTracks (edit));
+    p.destFile = out;
+    p.audioFormat = engine.getAudioFileFormatManager().getWavFormat();
+    p.bitDepth = 32;
+    p.sampleRateForAudio = rate;
+    p.blockSizeForAudio = 512;
+    p.time = { 0_tp, te::TimePosition::fromSeconds (seconds) };
+    p.usePlugins = true;
+    p.useMasterPlugins = true;
+    p.canRenderInMono = false;
+    auto f = te::Renderer::renderToFile ("render", p);
+    double r = 0;
+    return readAll (f, r);
+}
+
+static void fadeShapeTests (te::Engine& engine, const juce::File& dir)
+{
+    const double rate = 48000.0, seconds = 2.0;
+    const float level = 0.5f;
+    const double inLen = 0.5, outLen = 0.25;
+    const int inN = (int) (inLen * rate), outN = (int) (outLen * rate), total = (int) (rate * seconds);
+
+    const char* specs[] = { "linear", "equalPower", "sCurve 0.35", "exponential -0.6", "exponential 0.8",
+                            "dBLinear -48", "points damped 25:-12 50:-4 75:-1", "points spline 30:-20 60:-3",
+                            "points linear 50:-6" };
+
+    for (auto* specText : specs)
+    {
+        auto d = makeDcEdit (engine, dir, "fade", rate, seconds, level);
+        const auto spec = tonkori::FadeSpec::fromString (specText);
+        const auto outSpec = tonkori::FadeSpec::fromString ("equalPower");
+
+        tonkori::fades::setLength (*d.clip, true,  te::TimeDuration::fromSeconds (inLen));
+        tonkori::fades::setLength (*d.clip, false, te::TimeDuration::fromSeconds (outLen));
+        tonkori::fades::setSpec (*d.clip, true, spec);
+        tonkori::fades::setSpec (*d.clip, false, outSpec);
+
+        auto out = renderEdit (engine, *d.edit, dir.getChildFile ("fade_out.wav"), rate, seconds);
+        if (out.getNumSamples() < total) { check (false, juce::String ("Fade ") + specText + ": no render"); continue; }
+
+        double maxErr = 0;
+        for (int i = 0; i < total; ++i)
+        {
+            double expected = level;
+            if (i < inN)               expected = level * spec.gainAt ((double) i / inN);
+            else if (i >= total - outN) expected = level * outSpec.gainAt (1.0 - (double) (i - (total - outN)) / outN);
+            maxErr = std::max (maxErr, std::abs ((double) out.getSample (0, i) - expected));
+        }
+
+        std::cout << "        " << juce::String (specText).paddedRight (' ', 34) << " max error " << juce::String (maxErr, 8)
+                  << "  (" << juce::String (juce::Decibels::gainToDecibels (maxErr / level + 1e-12), 1) << " dB re signal)" << std::endl;
+        check (maxErr < 1.0e-4, juce::String ("Fade '") + specText + "' renders its formula (< -74 dB error)");
+    }
+}
+
+static void fadeToggleTests (te::Engine& engine, const juce::File& dir)
+{
+    const double rate = 48000.0, seconds = 1.0;
+    const float level = 0.5f;
+    const int total = (int) (rate * seconds);
+    auto d = makeDcEdit (engine, dir, "toggle", rate, seconds, level);
+    tonkori::fades::setLength (*d.clip, true, te::TimeDuration::fromSeconds (0.3));
+    tonkori::fades::setSpec (*d.clip, true, tonkori::FadeSpec::fromString ("linear"));
+
+    auto on = renderEdit (engine, *d.edit, dir.getChildFile ("t1.wav"), rate, seconds);
+    check (std::abs (on.getSample (0, 7200) - level * 0.5f) < 1e-4f, "Fade on: mid-fade sample at half gain");
+
+    tonkori::fades::setFadesOn (*d.clip, false);
+    auto off = renderEdit (engine, *d.edit, dir.getChildFile ("t2.wav"), rate, seconds);
+    bool flat = true;
+    for (int i = 0; i < total; ++i) flat = flat && off.getSample (0, i) == level;
+    check (flat, "Fades off: clip plays untouched, bit-exact, fade length kept (" + juce::String (d.clip->getFadeIn().inSeconds(), 2) + " s)");
+
+    const auto lin = tonkori::FadeSpec::fromString ("linear");
+    tonkori::fades::setAutoFade (*d.edit, true, 5.0, &lin);
+    auto autoOn = renderEdit (engine, *d.edit, dir.getChildFile ("t3.wav"), rate, seconds);
+    const int an = (int) (0.005 * rate);
+    bool autoOk = std::abs (autoOn.getSample (0, an / 2) - level * 0.5f) < 1e-4f
+               && autoOn.getSample (0, an + 10) == level
+               && std::abs (autoOn.getSample (0, total - an / 2) - level * 0.5f) < 2e-3f;
+    check (autoOk, "Auto-fades on: 5 ms edge fades applied to a clip whose own fades are off");
+
+    tonkori::fades::setAutoFade (*d.edit, false, 5.0);
+    tonkori::fades::setFadesOn (*d.clip, true);
+    auto back = renderEdit (engine, *d.edit, dir.getChildFile ("t4.wav"), rate, seconds);
+    check (std::abs (back.getSample (0, 7200) - level * 0.5f) < 1e-4f, "Fades back on: original fade restored");
+}
+
+//==============================================================================
+// Live edits: the transport keeps running (hosted device) while clips are changed.
+static void liveEditTests (te::Engine& engine, const juce::File& dir)
+{
+    const double rate = 48000.0;
+    const int block = 512;
+    const float level = 0.5f;
+
+    auto& hostedIface = engine.getDeviceManager().getHostedAudioDeviceInterface();
+    hostedIface.prepareToPlay (rate, block);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+
+    auto d = makeDcEdit (engine, dir, "live", rate, 20.0, level);
+    auto& transport = d.edit->getTransport();
+    transport.ensureContextAllocated();
+    transport.setPosition (0_tp);
+    transport.play (false);
+
+    auto& hosted = engine.getDeviceManager().getHostedAudioDeviceInterface();
+    juce::AudioBuffer<float> buf (2, block);
+    juce::MidiBuffer midi;
+    double playedSeconds = 0;
+    float lastSample = 0;
+
+    auto runFor = [&] (double seconds)
+    {
+        const int blocks = (int) std::ceil (seconds * rate / block);
+        for (int b = 0; b < blocks; ++b)
+        {
+            buf.clear();
+            hosted.processBlock (buf, midi);
+            lastSample = buf.getSample (0, block - 1);
+            playedSeconds += block / rate;
+            juce::MessageManager::getInstance()->runDispatchLoopUntil (1);
+        }
+    };
+
+    // Wait until audio flows (graph built), then measure.
+    for (int i = 0; i < 400 && std::abs (lastSample - level) > 1e-6f; ++i) runFor (block / rate);
+    check (std::abs (lastSample - level) < 1e-6f, "Live: playback running through the hosted device");
+
+    auto waitFor = [&] (std::function<bool (float)> condition, const juce::String& what)
+    {
+        const double t0 = playedSeconds;
+        for (int i = 0; i < 2000; ++i)
+        {
+            runFor (block / rate);
+            if (condition (lastSample))
+            {
+                std::cout << "        " << what << " heard after " << juce::String ((playedSeconds - t0) * 1000.0, 1) << " ms of playback" << std::endl;
+                return true;
+            }
+        }
+        return false;
+    };
+
+    // 1. Mute the clip while playing.
+    d.clip->setMuted (true);
+    check (waitFor ([] (float s) { return s == 0.0f; }, "Clip mute"), "Live: muting a clip while playing takes effect");
+    d.clip->setMuted (false);
+    check (waitFor ([&] (float s) { return s == level; }, "Clip unmute"), "Live: unmuting while playing takes effect");
+
+    // 2. Change clip gain while playing.
+    d.clip->setGainDB (-6.0f);
+    const float g6 = level * juce::Decibels::decibelsToGain (-6.0f);
+    check (waitFor ([&] (float s) { return std::abs (s - g6) < 1e-5f; }, "Clip gain -6 dB"), "Live: clip gain change while playing takes effect");
+    d.clip->setGainDB (0.0f);
+    waitFor ([&] (float s) { return s == level; }, "Clip gain 0 dB");
+
+    // 3. Program a long fade-out ahead of the playhead while playing; hear it when we reach it.
+    const auto now = transport.getPosition().inSeconds();
+    const double fadeStart = now + 1.0, clipEnd = 20.0;
+    tonkori::fades::setLength (*d.clip, false, te::TimeDuration::fromSeconds (clipEnd - fadeStart));
+    tonkori::fades::setSpec (*d.clip, false, tonkori::FadeSpec::fromString ("linear"));
+    runFor (2.0);                                       // now inside the fade
+    const float s1 = lastSample;
+    const int blocks = 94;                              // exactly 94 × 512 samples later
+    for (int b = 0; b < blocks; ++b) runFor (block / rate);
+    const float s2 = lastSample;
+    const double dt = blocks * block / rate;
+    const double measuredSlope = (s2 - s1) / dt;
+    const double formulaSlope  = -level / (clipEnd - fadeStart);
+    std::cout << "        fade-out programmed live: slope " << juce::String (measuredSlope, 6) << " /s, formula "
+              << juce::String (formulaSlope, 6) << " /s (level " << juce::String (s1, 4) << " -> " << juce::String (s2, 4) << ")" << std::endl;
+    check (s1 < level && std::abs (measuredSlope - formulaSlope) < 1e-4, "Live: fade programmed during playback plays its curve");
+
+    // 4. Toggle that fade off and on while inside it.
+    tonkori::fades::setFadesOn (*d.clip, false);
+    check (waitFor ([&] (float s) { return s == level; }, "Fade toggled off"), "Live: toggling fades off mid-fade");
+    tonkori::fades::setFadesOn (*d.clip, true);
+    check (waitFor ([&] (float s) { return s < level * 0.999f; }, "Fade toggled on"), "Live: toggling fades back on mid-fade");
+
+    // 5. Move the clip away from the playhead while playing.
+    d.clip->setStart (transport.getPosition() + te::TimeDuration::fromSeconds (30.0), false, true);
+    check (waitFor ([] (float s) { return s == 0.0f; }, "Clip moved away"), "Live: moving a clip while playing takes effect");
+
+    check (transport.isPlaying(), "Live: transport never stopped during the edits");
+    transport.stop (false, false);
+}
+
 //==============================================================================
 int main()
 {
@@ -353,9 +575,20 @@ int main()
         nullTest (engine, dir, 96000.0, 32);
         nullTest (engine, dir, 96000.0, 24);
         nullTest (engine, dir, 352800.0, 32);
+
+        std::cout << "[3] Fade curves: engine output vs formula, sample by sample" << std::endl;
+        fadeShapeTests (engine, dir);
+
+        std::cout << "[4] Fade toggles (per clip on/off, session auto-fades)" << std::endl;
+        fadeToggleTests (engine, dir);
+
+        std::cout << "[5] Edits while the transport runs" << std::endl;
+        hp.sampleRate = 48000.0;
+        engine.getDeviceManager().getHostedAudioDeviceInterface().initialise (hp);
+        liveEditTests (engine, dir);
     }
 
-    std::cout << "[2] DSD -> DXD decoding" << std::endl;
+    std::cout << "[6] DSD -> DXD decoding" << std::endl;
     dsdTest (dir, 1);
     dsdTest (dir, 2);
     dsdTest (dir, 4);

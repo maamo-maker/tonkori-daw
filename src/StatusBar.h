@@ -28,6 +28,7 @@ public:
     }
 
     void setEdit (te::Edit* e) { edit = e; }
+    void setInsertMarkerSource (const te::TimePosition* m) { insertMarker = m; }
 
     /** Shows a short confirmation in place of the device line for ~3 s. */
     void flashMessage (const juce::String& m)
@@ -54,6 +55,7 @@ public:
 private:
     te::Engine& engine;
     te::Edit* edit = nullptr;
+    const te::TimePosition* insertMarker = nullptr;
     juce::Label timeLabel, deviceLabel, cpuLabel;
     juce::String message;
     juce::uint32 messageUntil = 0;
@@ -73,7 +75,7 @@ private:
         if (edit != nullptr)
         {
             auto& transport = edit->getTransport();
-            const auto pos  = transport.getPosition();
+            const auto pos  = transport.isPlaying() || insertMarker == nullptr ? transport.getPosition() : *insertMarker;
             const auto bb   = edit->tempoSequence.toBarsAndBeats (pos);
             const auto bpm  = edit->tempoSequence.getBpmAt (pos);
             const auto beat = bb.getWholeBeats() + 1;

@@ -16,6 +16,27 @@ Tonkori uses Ableton Live 12's default Mac shortcuts (Live manual, ch. 42 "Live 
 
 Clicking on an empty part of a track, or on a clip, sets the insert marker while stopped.
 
+## Tools and edit modes
+
+| Action | Keys | From |
+|---|---|---|
+| Smart / Range / Grab / Trim / Fade / Split tool | 1 / 2 / 3 / 4 / 5 / 6 | Cubase |
+| Slip / Grid / Shuffle / Spot mode | Opt 1 / 2 / 3 / 4 | Pro Tools modes |
+| Narrow / widen grid, triplet, snap on/off | Cmd 1 / 2 / 3 / 4 | Live |
+| Clear selection | Esc | |
+
+Smart Tool (mouse): the top corners of a clip drag its fades, Opt-drag bends the curve, the edges trim, the upper half selects time, the lower half moves (Opt copies), and a double-click on a fade opens the fade editor.
+
+## Fades
+
+| Action | Keys | From |
+|---|---|---|
+| Fade editor (numeric) | Cmd F | Pro Tools |
+| Create fades / crossfade from the time selection | Cmd Opt F | Live + Pro Tools |
+| Delete fades | Cmd Opt Delete | Live |
+| Fades on/off for the selected clips (kept, bypassed) | F | Tonkori |
+| Session auto-fades on/off | Shift F | Tonkori |
+
 ## Editing
 
 | Action | Keys | Live |
@@ -26,7 +47,8 @@ Clicking on an empty part of a track, or on a clip, sets the insert marker while
 | Delete clip or track | Delete | ✓ |
 | Select all clips | Cmd A | ✓ |
 | Rename clip or track | Cmd R | ✓ |
-| Split clip at insert marker (selected clips; else clips under the marker) | Cmd E | ✓ |
+| Split at insert marker, or at both edges of the time selection | Cmd E | ✓ |
+| Spot clip (type its exact start) | Cmd Opt P | Pro Tools |
 | Insert silence (loop length if the loop is on, else 1 bar) | Cmd I | ✓ |
 | Delete time (loop range, closes the gap) | Cmd Shift Delete | ✓ |
 | Create fades (10 ms in/out) / Delete fades | Cmd Opt F / Cmd Opt Delete | ✓ |
@@ -39,8 +61,11 @@ Clicking on an empty part of a track, or on a clip, sets the insert marker while
 
 | Action | Keys | Live |
 |---|---|---|
-| Loop selection / toggle loop (empty brace defaults to 4 bars) | Cmd L | ✓ |
-| Select material in loop | Cmd Shift L | ✓ |
+| Loop selection / toggle loop (time selection, clips, or a 4-bar default) | Cmd L | ✓ |
+| Punch in/out on the loop range | Cmd Shift P | Tonkori |
+| Follow playhead | Cmd Shift F | ✓ |
+| Show/hide Inspector, Mixer | Cmd Opt I, Cmd Opt M | ✓ |
+| Select loop range as a time selection | Cmd Shift L | ✓ |
 | Set loop start / end at insert marker | Cmd F10 / Cmd F11 | ✓ |
 | Zoom in / out | + / − | ✓ |
 | Optimize arrangement width | W | ✓ |
@@ -70,7 +95,7 @@ Clicking on an empty part of a track, or on a clip, sets the insert marker while
 
 - Tab: Session/Arrangement toggle (M3, clip launcher)
 - Cmd J: consolidate. Cmd Shift J: crop
-- Cmd 1–5: grid narrow/widen/triplet/snap/adaptive. Cmd 6–0: global quantization
+- Cmd 5: adaptive grid. Cmd 6–0: global quantization
 - Cmd G: group tracks. Cmd Opt T: return track
 - A: automation mode. B: draw mode. Cmd Opt U: take lanes and comping (M2)
 - Cmd M / Cmd K: MIDI and key map modes. M: computer MIDI keyboard
