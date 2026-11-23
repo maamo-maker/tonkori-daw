@@ -547,6 +547,8 @@ static void liveEditTests (te::Engine& engine, const juce::File& dir)
     transport.stop (false, false);
 }
 
+#include "M2Tests.inc"
+
 //==============================================================================
 int main()
 {
@@ -561,6 +563,7 @@ int main()
 
     {
         te::Engine engine { "TonkoriSelfTest", std::make_unique<HeadlessUI>(), std::make_unique<tonkori::EngineBehaviour>() };
+        engine.getPluginManager().createBuiltInType<LatencyTestPlugin>();
 
         // CI machines have no sound card: give the engine a virtual stereo output so
         // tracks have a destination (as they do on a real rig).
@@ -586,7 +589,27 @@ int main()
         hp.sampleRate = 48000.0;
         engine.getDeviceManager().getHostedAudioDeviceInterface().initialise (hp);
         liveEditTests (engine, dir);
+
+        std::cout << "[7] Clip gain line" << std::endl;
+        gainLineTests (engine, dir);
+        std::cout << "[8] Crossfades: splice point, length, alignment (null tests)" << std::endl;
+        crossfadeTests (engine, dir);
+        std::cout << "[9] Take lanes and comping" << std::endl;
+        takeLaneTests (engine, dir);
+        std::cout << "[10] Plug-in delay compensation" << std::endl;
+        pdcTests (engine, dir);
+        std::cout << "[11] Stems" << std::endl;
+        stemTests (engine, dir);
+        std::cout << "[12] Time-stretch and pitch" << std::endl;
+        stretchTests (engine, dir);
+        std::cout << "[15] Video import / export" << std::endl;
+        videoTests (engine, dir);
     }
+
+    std::cout << "[13] Loudness (ITU-R BS.1770-4, EBU 3341/3342)" << std::endl;
+    loudnessTests();
+    std::cout << "[14] Round-trip latency measurement" << std::endl;
+    latencyProbeTests();
 
     std::cout << "[6] DSD -> DXD decoding" << std::endl;
     dsdTest (dir, 1);
@@ -603,6 +626,7 @@ int main()
     }
 
     std::cout << (failures == 0 ? "ALL PASS" : juce::String (failures) + " FAILURE(S)") << std::endl;
-    dir.deleteRecursively();
+    if (juce::SystemStats::getEnvironmentVariable ("TONKORI_KEEP_TEST_FILES", {}).isEmpty())
+        dir.deleteRecursively();
     return failures == 0 ? 0 : 1;
 }

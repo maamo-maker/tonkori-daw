@@ -11,7 +11,8 @@ namespace tonkori::ui
     {
         juce::Array<te::Plugin*> r;
         for (auto* p : t.pluginList)
-            if (dynamic_cast<te::VolumeAndPanPlugin*> (p) == nullptr && dynamic_cast<te::LevelMeterPlugin*> (p) == nullptr)
+            if (dynamic_cast<te::VolumeAndPanPlugin*> (p) == nullptr && dynamic_cast<te::LevelMeterPlugin*> (p) == nullptr
+                 && dynamic_cast<te::AuxSendPlugin*> (p) == nullptr && dynamic_cast<te::AuxReturnPlugin*> (p) == nullptr)
                 r.add (p);
         return r;
     }
@@ -19,9 +20,11 @@ namespace tonkori::ui
     inline int insertIndexFor (te::Track& t)
     {
         int i = 0;
+        // after any Aux Return (bus input), before sends, the fader and the meter
         for (auto* p : t.pluginList)
         {
-            if (dynamic_cast<te::VolumeAndPanPlugin*> (p) || dynamic_cast<te::LevelMeterPlugin*> (p)) return i;
+            if (dynamic_cast<te::VolumeAndPanPlugin*> (p) || dynamic_cast<te::LevelMeterPlugin*> (p)
+                 || dynamic_cast<te::AuxSendPlugin*> (p)) return i;
             ++i;
         }
         return i;
@@ -89,9 +92,20 @@ namespace tonkori::ui
         showAddPluginMenu (track.edit, track.pluginList, [t] { return t ? insertIndexFor (*t) : 0; }, target, std::move (onAdded));
     }
 
+    /** Slot label: name, plus why it isn't running if it failed to load. */
+    inline juce::String slotName (te::Plugin& p)
+    {
+        if (auto* ext = dynamic_cast<te::ExternalPlugin*> (&p))
+            if (ext->getAudioPluginInstance() == nullptr)
+                return p.getName() + " (missing)";
+        return p.getName();
+    }
+
     inline void showPluginSlotMenu (te::Plugin& p, juce::Component* target, std::function<void()> onChange = {})
     {
         juce::PopupMenu m;
+        if (auto* ext = dynamic_cast<te::ExternalPlugin*> (&p); ext != nullptr && ext->getAudioPluginInstance() == nullptr)
+            m.addItem (-1, "Not loaded: " + (ext->getLoadError().isNotEmpty() ? ext->getLoadError() : juce::String ("plug-in not found on this Mac")), false, false);
         m.addItem (1, "Open editor");
         m.addItem (2, "Bypass", true, ! p.isEnabled());
         m.addSeparator();

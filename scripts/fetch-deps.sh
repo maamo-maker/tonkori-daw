@@ -25,6 +25,11 @@ clone_at () {
 clone_at "$TE_URL"   "$TE_REV"   libs/tracktion_engine
 clone_at "$JUCE_URL" "$JUCE_REV" libs/tracktion_engine/modules/juce
 
+# Rubber Band (time-stretching, R3 engine), built from its single-file source.
+RB_URL=$(awk '$1=="rubberband"{print $2}' deps.lock)
+RB_REV=$(awk '$1=="rubberband"{print $3}' deps.lock)
+clone_at "$RB_URL" "$RB_REV" libs/rubberband
+
 # Tonkori engine patches: reset to the pinned tree, then apply every patch in order.
 git -C libs/tracktion_engine checkout -q -- .
 for p in patches/*.patch; do

@@ -2,6 +2,7 @@
 
 #include <JuceHeader.h>
 #include "Theme.h"
+#include "Logo.h"
 #include "ViewState.h"
 #include "../model/ClipFades.h"
 
@@ -165,6 +166,8 @@ namespace tonkori::ui
             g.setColour (colours::lineStrong);
             g.drawHorizontalLine (getHeight() - 1, 0.0f, (float) getWidth());
 
+            drawTreeMark (g, logoArea.toFloat(), juce::Colour (0xfff5f0e8));
+
             // counter well
             g.setColour (colours::bg);
             g.fillRoundedRectangle (counterWell.toFloat(), 5.0f);
@@ -184,6 +187,8 @@ namespace tonkori::ui
 
             auto place = [] (juce::Rectangle<int>& row, juce::Component& c, int w, int gap = 4) { c.setBounds (row.removeFromLeft (w)); row.removeFromLeft (gap); };
 
+            logoArea = top.removeFromLeft (26).reduced (0, 2);
+            top.removeFromLeft (12);
             place (top, toStart, 34); place (top, play, 40); place (top, rec, 34, 16);
             place (top, loop, 34); place (top, punch, 34, 16);
             place (top, click, 34); place (top, follow, 34, 16);
@@ -231,7 +236,7 @@ namespace tonkori::ui
         juce::Label counter, secondary, formatLabel, tempo, meterSig, selection;
         juce::OwnedArray<juce::TextButton> tools, modeButtons;
         juce::ComboBox grid;
-        juce::Rectangle<int> counterWell;
+        juce::Rectangle<int> counterWell, logoArea;
 
         void mouseUp (const juce::MouseEvent& e) override
         {

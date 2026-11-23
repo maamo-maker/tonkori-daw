@@ -24,6 +24,7 @@ namespace tonkori::ui
         const juce::Colour warn       { 0xffffb224 };
         const juce::Colour selection  { 0x334c9aff };
         const juce::Colour playhead   { 0xfff2f4f7 };
+        const juce::Colour gain       { 0xfff5d76e };   // clip gain lines
 
         inline juce::Colour trackColour (int index)
         {

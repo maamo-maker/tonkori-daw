@@ -2,6 +2,9 @@
 #include "Theme.h"
 #include "FadeEditor.h"
 #include "PluginMenu.h"
+#include "../model/Stretch.h"
+#include "../model/GainLine.h"
+#include "../model/Routing.h"
 
 namespace tonkori::ui
 {
@@ -125,6 +128,40 @@ namespace
             reverse->onClick = [this] { tx ("Reverse clip"); const bool r = ! reverse->getToggleState(); for (auto* c : clips()) c->setIsReversed (r); refresh(); };
             fadesOn->onClick = [this] { tx ("Fades on/off"); const bool on = ! fadesOn->getToggleState(); for (auto* c : clips()) fades::setFadesOn (*c, on); refresh(); };
 
+            // Time & pitch
+            stretchTitle = makeLabel (owned, *this, "TIME & PITCH", true);
+            algoL = makeLabel (owned, *this, "Mode");
+            algo.addItemList ([] { juce::StringArray a; for (auto& x : tonkori::stretch::algorithms()) a.add (x.name); return a; }(), 1);
+            algo.onChange = [this] { tx ("Stretch mode"); for (auto* c : clips()) tonkori::stretch::setAlgorithm (*c, algo.getSelectedItemIndex()); refresh(); };
+            addAndMakeVisible (algo);
+            stretchL = makeLabel (owned, *this, "Stretch"); stretch = makeField (owned, *this);
+            pitchL = makeLabel (owned, *this, "Pitch");     pitch = makeField (owned, *this);
+            stretch->setTooltip ("Length as % of the original: 200 = twice as long (half speed). Opt-drag a clip edge to stretch by eye (TCE).");
+            pitch->setTooltip ("Semitones, decimals are cents: 7, -12, 0.25");
+            stretch->onCommit = [this] (const juce::String& txt)
+            {
+                const double pc = txt.retainCharacters ("0123456789.-").getDoubleValue();
+                if (pc > 0) { tx ("Stretch"); for (auto* c : clips()) tonkori::stretch::setPercent (*c, pc); }
+                refresh();
+            };
+            pitch->onCommit = [this] (const juce::String& txt)
+            {
+                tx ("Pitch");
+                for (auto* c : clips()) tonkori::stretch::setPitch (*c, txt.retainCharacters ("0123456789.-+").getDoubleValue());
+                refresh();
+            };
+            resetStretch = makeToggle (owned, *this, "Reset time & pitch");
+            resetStretch->onClick = [this] { tx ("Reset stretch"); for (auto* c : clips()) tonkori::stretch::reset (*c); refresh(); };
+
+            // Gain line
+            gainTitle = makeLabel (owned, *this, "CLIP GAIN LINE", true);
+            gainInfo = makeLabel (owned, *this, "");
+            clearGain = makeToggle (owned, *this, "Clear line");
+            showGain = makeToggle (owned, *this, "Show lines");
+            showGain->setColour (juce::TextButton::buttonOnColourId, colours::gain.withAlpha (0.5f));
+            clearGain->onClick = [this] { tx ("Clear gain line"); for (auto* c : clips()) tonkori::gainline::clear (*c); refresh(); };
+            showGain->onClick = [this] { tonkori::gainline::setShown (vs.edit, ! tonkori::gainline::isShown (vs.edit)); vs.changed(); refresh(); };
+
             fadeIn.onLayoutChange = fadeOut.onLayoutChange = [this] { if (onHeightChange) onHeightChange(); };
             addAndMakeVisible (fadeIn);
             addAndMakeVisible (fadeOut);
@@ -161,11 +198,18 @@ namespace
             mute->setToggleState (c->isMuted(), juce::dontSendNotification);
             reverse->setToggleState (c->getIsReversed(), juce::dontSendNotification);
             fadesOn->setToggleState (fades::areFadesOn (*c), juce::dontSendNotification);
+            algo.setSelectedItemIndex (tonkori::stretch::algorithmIndex (*c), juce::dontSendNotification);
+            set (stretch, juce::String (tonkori::stretch::getPercent (*c), 2) + " %");
+            set (pitch, (c->getPitchChange() > 0 ? "+" : "") + juce::String (c->getPitchChange(), 2) + " st");
+            const auto np = (int) tonkori::gainline::getPoints (*c).size();
+            gainInfo->setText (np == 0 ? juce::String ("No points. Click the line on the clip to add one; Cmd-drag moves the whole line, Opt-click deletes a point.")
+                                       : juce::String (np) + " point" + (np > 1 ? "s" : ""), juce::dontSendNotification);
+            showGain->setToggleState (tonkori::gainline::isShown (vs.edit), juce::dontSendNotification);
             if (! fadeIn.isMouseOverOrDragging (true) && ! fadeIn.hasKeyboardFocus (true)) fadeIn.refresh();
             if (! fadeOut.isMouseOverOrDragging (true) && ! fadeOut.hasKeyboardFocus (true)) fadeOut.refresh();
         }
 
-        int idealHeight() const { return 40 + 6 * 28 + 34 + 16 + fadeIn.getIdealHeight() + 14 + fadeOut.getIdealHeight() + 20; }
+        int idealHeight() const { return 40 + 6 * 28 + 34 + 16 + fadeIn.getIdealHeight() + 14 + fadeOut.getIdealHeight() + 20 + 22 + 4 * 28 + 16 + 22 + 40 + 30; }
 
         void resized() override
         {
@@ -186,6 +230,18 @@ namespace
             fadeIn.setBounds (f.row (fadeIn.getIdealHeight()));
             f.space (10);
             fadeOut.setBounds (f.row (fadeOut.getIdealHeight()));
+            f.space (12);
+            stretchTitle->setBounds (f.row (18));
+            f.labelled (*algoL, algo);
+            f.labelled (*stretchL, *stretch);
+            f.labelled (*pitchL, *pitch);
+            resetStretch->setBounds (f.row (24));
+            f.space (12);
+            gainTitle->setBounds (f.row (18));
+            gainInfo->setBounds (f.row (36));
+            auto gr = f.row (24);
+            clearGain->setBounds (gr.removeFromLeft (gr.getWidth() / 2 - 2)); gr.removeFromLeft (4);
+            showGain->setBounds (gr);
         }
 
         void paint (juce::Graphics& g) override
@@ -202,7 +258,10 @@ namespace
         juce::OwnedArray<juce::Component> owned;
         juce::Label *title, *nameL, *startL, *endL, *lenL, *offL, *gainL;
         Field *name, *start, *end, *length, *offset, *gain;
-        juce::TextButton *mute, *reverse, *fadesOn;
+        juce::TextButton *mute, *reverse, *fadesOn, *resetStretch, *clearGain, *showGain;
+        juce::Label *stretchTitle, *algoL, *stretchL, *pitchL, *gainTitle, *gainInfo;
+        Field *stretch, *pitch;
+        juce::ComboBox algo;
         FadeEditorPanel fadeIn, fadeOut;
 
         void tx (const juce::String& n) { vs.edit.getUndoManager().beginNewTransaction (n); }
@@ -220,6 +279,22 @@ namespace
             panL = makeLabel (owned, *this, "Pan");       pan = makeField (owned, *this);
             insL = makeLabel (owned, *this, "INSERTS", true);
             add = makeToggle (owned, *this, "+ Add insert");
+            outL = makeLabel (owned, *this, "Output");
+            output = makeToggle (owned, *this, "Master");
+            output->onClick = [this]
+            {
+                if (! track) return;
+                auto dests = tonkori::routing::destinationsFor (*track);
+                juce::PopupMenu m;
+                for (int i = 0; i < (int) dests.size(); ++i) m.addItem (i + 1, dests[(size_t) i].label, true, tonkori::routing::currentDestination (*track) == dests[(size_t) i].label);
+                m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (output), [this, dests] (int r)
+                {
+                    if (r <= 0 || ! track) return;
+                    tx ("Track output");
+                    tonkori::routing::setDestination (*track, dests[(size_t) (r - 1)]);
+                    refresh();
+                });
+            };
 
             vol->setTooltip ("Track volume in dB");
             pan->setTooltip ("-100 (L) ... 0 ... 100 (R)");
@@ -252,13 +327,14 @@ namespace
                 set (vol, vp->getVolumeDb() <= -99.0f ? juce::String ("-inf dB") : juce::String (vp->getVolumeDb(), 2) + " dB");
                 set (pan, juce::String (juce::roundToInt (vp->getPan() * 100.0f)));
             }
+            output->setButtonText (tonkori::routing::currentDestination (*track));
             if (userPlugins (*track).size() != slots.size()) rebuildInserts();
             for (int i = 0; i < slots.size(); ++i)
                 if (auto* p = userPlugins (*track)[i])
-                    slots[i]->setButtonText ((p->isEnabled() ? "" : "[bypassed] ") + p->getName());
+                    slots[i]->setButtonText ((p->isEnabled() ? "" : "[bypassed] ") + slotName (*p));
         }
 
-        int idealHeight() const { return 40 + 3 * 28 + 30 + (slots.size() + 1) * 28 + 20; }
+        int idealHeight() const { return 40 + 4 * 28 + 30 + (slots.size() + 1) * 28 + 20; }
 
         void resized() override
         {
@@ -267,6 +343,7 @@ namespace
             f.labelled (*nameL, *name);
             f.labelled (*volL, *vol);
             f.labelled (*panL, *pan);
+            f.labelled (*outL, *output);
             f.space (10);
             insL->setBounds (f.row (18));
             for (auto* s : slots) s->setBounds (f.row (24));
@@ -280,9 +357,9 @@ namespace
         te::AudioTrack::Ptr track;
         juce::OwnedArray<juce::Component> owned;
         juce::OwnedArray<juce::TextButton> slots;
-        juce::Label *title, *nameL, *volL, *panL, *insL;
+        juce::Label *title, *nameL, *volL, *panL, *insL, *outL;
         Field *name, *vol, *pan;
-        juce::TextButton* add;
+        juce::TextButton *add, *output;
 
         void tx (const juce::String& n) { vs.edit.getUndoManager().beginNewTransaction (n); }
 
@@ -292,7 +369,7 @@ namespace
             if (! track) return;
             for (auto* p : userPlugins (*track))
             {
-                auto* b = slots.add (new juce::TextButton (p->getName()));
+                auto* b = slots.add (new juce::TextButton (slotName (*p)));
                 b->setWantsKeyboardFocus (false);
                 te::Plugin::Ptr ptr (p);
                 b->onClick = [this, ptr, b] { showPluginSlotMenu (*ptr, b, [this] { refresh(); }); };

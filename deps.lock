@@ -2,3 +2,5 @@
 # name  url  commit
 tracktion_engine https://github.com/Tracktion/tracktion_engine.git be4a6a0c94cc59ebe6f7a0a02373567cb2c01cfb
 juce https://github.com/juce-framework/JUCE.git 7ff644f65d7daa1428c34b9738ebb5c449dc9172
+ffmpeg https://github.com/FFmpeg/FFmpeg.git 3a0867c2bfda4a4d4309ca1a8cbdc6175e67f587
+rubberband https://github.com/breakfastquay/rubberband.git 1d95888bec3ae0a17c0c4af791810d5a63f6bc35

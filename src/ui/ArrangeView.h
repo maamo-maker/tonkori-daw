@@ -40,7 +40,7 @@ namespace tonkori::ui
         juce::Rectangle<int> getScreenBoundsOfClip (te::Clip&) const;
 
         static constexpr int headerWidth = 236;
-        static constexpr int rulerHeight = 38;
+        static constexpr int rulerHeight = 54;
 
     private:
         ViewState& vs;

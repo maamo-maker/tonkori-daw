@@ -9,15 +9,33 @@ class TonkoriApplication : public juce::JUCEApplication
 public:
     const juce::String getApplicationName() override    { return ProjectInfo::projectName; }
     const juce::String getApplicationVersion() override { return ProjectInfo::versionString; }
-    bool moreThanOneInstanceAllowed() override          { return false; }
+    bool moreThanOneInstanceAllowed() override          { return true; }   // the plug-in scan helper is a second instance
 
     void initialise (const juce::String& commandLine) override
     {
+        // Plug-in scan helper: scan one plug-in, write the result, quit (no window).
+        if (commandLine.contains (tonkori::scan::flag))
+        {
+           #if JUCE_MAC
+            juce::Process::setDockIconVisible (false);
+           #endif
+            const auto args = juce::StringArray::fromTokens (commandLine, true);
+            juce::StringArray unquoted;
+            for (auto& a : args) unquoted.add (a.unquoted());
+            const int code = tonkori::scan::runChildScan (unquoted);
+            setApplicationReturnValue (code);
+            quit();
+            return;
+        }
+
         mainWindow = std::make_unique<MainWindow> (*this);
         importFromCommandLine (commandLine);
     }
 
-    void anotherInstanceStarted (const juce::String& commandLine) override { importFromCommandLine (commandLine); }
+    void anotherInstanceStarted (const juce::String& commandLine) override
+    {
+        if (! commandLine.contains (tonkori::scan::flag)) importFromCommandLine (commandLine);
+    }
 
     void importFromCommandLine (const juce::String& commandLine)
     {

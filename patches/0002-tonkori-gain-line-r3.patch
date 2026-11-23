@@ -1,0 +1,185 @@
+diff --git a/modules/tracktion_engine/playback/graph/tracktion_EditNodeBuilder.cpp b/modules/tracktion_engine/playback/graph/tracktion_EditNodeBuilder.cpp
+index 6810b44..3c39583 100644
+--- a/modules/tracktion_engine/playback/graph/tracktion_EditNodeBuilder.cpp
++++ b/modules/tracktion_engine/playback/graph/tracktion_EditNodeBuilder.cpp
+@@ -386,8 +386,9 @@ std::unique_ptr<tracktion::graph::Node> createFadeNodeForClip (AudioClipBase& cl
+     const auto overrideOut = behaviour.getFadeOverride (clip, false);
+     if (overrideIn.valid)  fIn  = overrideIn.length;
+     if (overrideOut.valid) fOut = overrideOut.length;
++    auto envelope = behaviour.getClipGainEnvelope (clip);
+ 
+-    if (fIn > 0_td || fOut > 0_td)
++    if (fIn > 0_td || fOut > 0_td || envelope != nullptr)
+     {
+         const bool speedIn = clip.getFadeInBehaviour() == AudioClipBase::speedRamp && fIn > 0_td;
+         const bool speedOut = clip.getFadeOutBehaviour() == AudioClipBase::speedRamp && fOut > 0_td;
+@@ -401,7 +402,9 @@ std::unique_ptr<tracktion::graph::Node> createFadeNodeForClip (AudioClipBase& cl
+                                         clip.getFadeInType(), clip.getFadeOutType(),
+                                         true,
+                                         overrideIn.valid ? overrideIn.curve : nullptr,
+-                                        overrideOut.valid ? overrideOut.curve : nullptr);
++                                        overrideOut.valid ? overrideOut.curve : nullptr,
++                                        envelope,
++                                        pos.getStart() - clip.getPosition().getOffset());
+     }
+ 
+     return node;
+diff --git a/modules/tracktion_engine/playback/graph/tracktion_FadeInOutNode.cpp b/modules/tracktion_engine/playback/graph/tracktion_FadeInOutNode.cpp
+index b03f0ce..c0c1759 100644
+--- a/modules/tracktion_engine/playback/graph/tracktion_FadeInOutNode.cpp
++++ b/modules/tracktion_engine/playback/graph/tracktion_FadeInOutNode.cpp
+@@ -168,7 +168,9 @@ FadeInOutNode::FadeInOutNode (std::unique_ptr<tracktion::graph::Node> inputNode,
+                               AudioFadeCurve::Type fadeInType_, AudioFadeCurve::Type fadeOutType_,
+                               bool clearSamplesOutsideFade,
+                               std::shared_ptr<const std::vector<float>> fadeInCurve_,
+-                              std::shared_ptr<const std::vector<float>> fadeOutCurve_)
++                              std::shared_ptr<const std::vector<float>> fadeOutCurve_,
++                              std::shared_ptr<const ClipGainEnvelope> gainEnvelope_,
++                              TimePosition contentZero_)
+     : TracktionEngineNode (ps),
+       input (std::move (inputNode)),
+       fadeIn (in),
+@@ -177,6 +179,8 @@ FadeInOutNode::FadeInOutNode (std::unique_ptr<tracktion::graph::Node> inputNode,
+       fadeOutType (fadeOutType_),
+       fadeInCurve (std::move (fadeInCurve_)),
+       fadeOutCurve (std::move (fadeOutCurve_)),
++      gainEnvelope (std::move (gainEnvelope_)),
++      contentZero (contentZero_),
+       clearExtraSamples (clearSamplesOutsideFade)
+ {
+     setOptimisations ({ tracktion::graph::ClearBuffers::no,
+@@ -222,7 +226,7 @@ void FadeInOutNode::process (ProcessContext& pc)
+ 
+     destMidiBlock.copyFrom (sourceBuffers.midi);
+ 
+-    if (! renderingNeeded (editTimeRange))
++    if (! renderingNeeded (editTimeRange) && gainEnvelope == nullptr)
+     {
+         // If we don't need to apply the fade, just pass through the buffer
+         setAudioOutput (input.get(), sourceBuffers.audio);
+@@ -237,6 +241,47 @@ void FadeInOutNode::process (ProcessContext& pc)
+                                 fadeOut + dynamicOffset, fadeOutType,
+                                 clearExtraSamples,
+                                 fadeInCurve.get(), fadeOutCurve.get());
++
++    // Tonkori patch: clip gain line, linear in dB between points.
++    if (gainEnvelope != nullptr && ! gainEnvelope->points.empty())
++    {
++        const auto& pts = gainEnvelope->points;
++        const auto numFrames = (int) destAudioBlock.getNumFrames();
++        if ((int) envelopeGains.size() < numFrames) envelopeGains.resize ((size_t) numFrames);
++
++        const double t0 = (editTimeRange.getStart() - (contentZero + dynamicOffset)).inSeconds();
++        const double dt = editTimeRange.getLength().inSeconds() / juce::jmax (1, numFrames);
++        size_t seg = 0;
++
++        auto dbOf = [] (float g) { return g > 1.0e-8f ? 20.0 * std::log10 ((double) g) : -160.0; };
++
++        for (int i = 0; i < numFrames; ++i)
++        {
++            const double t = t0 + dt * i;
++            float g;
++            if (t <= pts.front().first)      g = pts.front().second;
++            else if (t >= pts.back().first)  g = pts.back().second;
++            else
++            {
++                while (seg + 1 < pts.size() && pts[seg + 1].first <= t) ++seg;
++                while (seg > 0 && pts[seg].first > t) --seg;
++                const auto& a = pts[seg];
++                const auto& b = pts[std::min (seg + 1, pts.size() - 1)];
++                const double span = b.first - a.first;
++                const double f = span > 0 ? (t - a.first) / span : 0.0;
++                const double db = dbOf (a.second) + (dbOf (b.second) - dbOf (a.second)) * f;
++                g = db <= -159.0 ? 0.0f : (float) std::pow (10.0, db / 20.0);
++            }
++            envelopeGains[(size_t) i] = g;
++        }
++
++        for (choc::buffer::ChannelCount ch = 0; ch < destAudioBlock.getNumChannels(); ++ch)
++        {
++            auto* d = destAudioBlock.getChannel (ch).data.data;
++            for (int i = 0; i < numFrames; ++i)
++                d[i] *= envelopeGains[(size_t) i];
++        }
++    }
+ }
+ 
+ bool FadeInOutNode::renderingNeeded (const TimeRange timelineRange)
+diff --git a/modules/tracktion_engine/playback/graph/tracktion_FadeInOutNode.h b/modules/tracktion_engine/playback/graph/tracktion_FadeInOutNode.h
+index b036473..0edcb09 100644
+--- a/modules/tracktion_engine/playback/graph/tracktion_FadeInOutNode.h
++++ b/modules/tracktion_engine/playback/graph/tracktion_FadeInOutNode.h
+@@ -28,7 +28,9 @@ public:
+                    AudioFadeCurve::Type fadeInType, AudioFadeCurve::Type fadeOutType,
+                    bool clearSamplesOutsideFade,
+                    std::shared_ptr<const std::vector<float>> fadeInCurve = {},
+-                   std::shared_ptr<const std::vector<float>> fadeOutCurve = {});
++                   std::shared_ptr<const std::vector<float>> fadeOutCurve = {},
++                   std::shared_ptr<const ClipGainEnvelope> gainEnvelope = {},
++                   TimePosition contentZero = {});
+ 
+     void setDynamicOffsetTime (TimeDuration) override;
+ 
+@@ -44,6 +46,9 @@ private:
+     TimeRange fadeIn, fadeOut;
+     AudioFadeCurve::Type fadeInType, fadeOutType;
+     std::shared_ptr<const std::vector<float>> fadeInCurve, fadeOutCurve;   // Tonkori patch
++    std::shared_ptr<const ClipGainEnvelope> gainEnvelope;                 // Tonkori patch
++    TimePosition contentZero;                                             // timeline time of content time 0
++    std::vector<float> envelopeGains;
+     bool clearExtraSamples = true;
+     TimeDuration dynamicOffset;
+ 
+diff --git a/modules/tracktion_engine/timestretch/tracktion_TimeStretch.cpp b/modules/tracktion_engine/timestretch/tracktion_TimeStretch.cpp
+index 26fd3d1..783f581 100644
+--- a/modules/tracktion_engine/timestretch/tracktion_TimeStretch.cpp
++++ b/modules/tracktion_engine/timestretch/tracktion_TimeStretch.cpp
+@@ -719,13 +719,17 @@ struct RubberBandStretcher  : public TimeStretcher::Stretcher
+     static int getOptionFlags (bool percussive)
+     {
++        // Tonkori patch: R3 ("finer") engine for both modes. Melodic preserves formants;
++        // percussive uses R3's short window for tight transients.
+         if (percussive)
+             return RubberBand::RubberBandStretcher::OptionProcessRealTime
+                 | RubberBand::RubberBandStretcher::OptionPitchHighConsistency
+-                | RubberBand::RubberBandStretcher::PercussiveOptions;
++                | RubberBand::RubberBandStretcher::OptionEngineFiner
++                | RubberBand::RubberBandStretcher::OptionWindowShort;
+ 
+         return RubberBand::RubberBandStretcher::OptionProcessRealTime
+             | RubberBand::RubberBandStretcher::OptionPitchHighConsistency
+-            | RubberBand::RubberBandStretcher::OptionWindowShort;
++            | RubberBand::RubberBandStretcher::OptionEngineFiner
++            | RubberBand::RubberBandStretcher::OptionFormantPreserved;
+     }
+ 
+     RubberBandStretcher (double sourceSampleRate, int samplesPerBlock, int numChannels, bool percussive)
+diff --git a/modules/tracktion_engine/utilities/tracktion_EngineBehaviour.h b/modules/tracktion_engine/utilities/tracktion_EngineBehaviour.h
+index 0d7ef6c..210a42f 100644
+--- a/modules/tracktion_engine/utilities/tracktion_EngineBehaviour.h
++++ b/modules/tracktion_engine/utilities/tracktion_EngineBehaviour.h
+@@ -39,6 +39,14 @@ struct FadeOverride
+     std::shared_ptr<const std::vector<float>> curve;
+ };
+ 
++/** Tonkori patch: clip gain line. Points are (seconds of clip content, i.e. time since
++    the clip's source start = timeline time - clip start + clip offset, linear gain);
++    gain is interpolated linearly in dB between points and held flat outside them. */
++struct ClipGainEnvelope
++{
++    std::vector<std::pair<double, float>> points;
++};
++
+ struct EditDefaults
+ {
+     TimecodeType timecodeType = TimecodeType::barsBeats;   /**< The timecode display format new Edits start with. */
+@@ -60,6 +68,9 @@ public:
+     /// Tonkori patch: return a valid FadeOverride to replace a clip's fade length/curve when building playback.
+     virtual FadeOverride getFadeOverride (const AudioClipBase&, bool /*isFadeIn*/)   { return {}; }
+ 
++    /// Tonkori patch: return a clip gain line (nullptr = none) applied after the fades.
++    virtual std::shared_ptr<const ClipGainEnvelope> getClipGainEnvelope (const AudioClipBase&) { return {}; }
++
+     /// This will be called if the PluginManager doesn't know how to create a Plugin for the given info.
+     virtual Plugin::Ptr createCustomPlugin (PluginCreationInfo)                     { return {}; }
+ 

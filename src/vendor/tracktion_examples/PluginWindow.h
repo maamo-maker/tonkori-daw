@@ -1,5 +1,7 @@
 #pragma once
 
+#include "ui/GenericPluginEditor.h"
+
 inline bool isDPIAware (te::Plugin&)
 {
 	// You should keep a DB of if plugins are DPI aware or not and recall that value
@@ -194,7 +196,7 @@ std::unique_ptr<Component> PluginWindow::create (te::Plugin& plugin)
 void PluginWindow::recreateEditor()
 {
     setEditor (nullptr);
-    setEditor (plugin.createEditor());
+    setEditor (tonkori::ui::createEditorFor (plugin));   // Tonkori: built-in processors get a generic editor
 }
 
 void PluginWindow::recreateEditorAsync()

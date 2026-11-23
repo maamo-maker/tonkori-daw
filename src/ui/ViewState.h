@@ -7,6 +7,8 @@ namespace te = tracktion;
 
 namespace tonkori::ui
 {
+    class LoudnessHub;
+
     enum class TimeFormat { barsBeats, timecode, minSec, samples };
     enum class Tool       { smart, range, grab, trim, fade, split };      // keys 1–6 (Cubase-style)
     enum class EditMode   { slip, grid, shuffle, spot };                  // Pro Tools edit modes
@@ -61,6 +63,22 @@ namespace tonkori::ui
         // Panels
         bool showInspector = true;
         bool showMixer = false;
+
+        // Picture (one video per session, drawn as a track above the audio)
+        struct VideoTrack
+        {
+            bool present = false;
+            double start = 0, length = 0, fps = 25, aspect = 16.0 / 9.0;
+            juce::String name;
+            std::function<juce::Image (double sourceSeconds)> thumbAt;   // empty image while decoding
+            std::function<void (double newStart)> setStart;
+            std::function<void()> openWindow, remove, spot;
+        } video;
+
+        LoudnessHub* loudness = nullptr;     // master loudness measurement (owned by the main window)
+
+        // Commands the canvas can trigger (wired by the main window)
+        std::function<void (te::AudioClipBase&, te::AudioClipBase&)> onOpenCrossfade;
 
         void changed() { sendChangeMessage(); }
 

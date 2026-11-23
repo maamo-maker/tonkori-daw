@@ -3,7 +3,7 @@
 What the reference DAWs offer, and where each function stands in Tonkori.
 **✓** = in Tonkori now · **◐** = partial · **M2…M6** = planned milestone · **—** = deliberately not planned.
 
-Source: PT = Pro Tools, PX = Pyramix, CB = Cubase/Nuendo, LV = Ableton Live, RP = Reaper, RX = RipX.
+Source: PT = Pro Tools, LG = Logic Pro, PX = Pyramix, CB = Cubase/Nuendo, LV = Ableton Live, RP = Reaper, RX = RipX.
 
 ## Recording
 
@@ -15,8 +15,8 @@ Source: PT = Pro Tools, PX = Pyramix, CB = Cubase/Nuendo, LV = Ableton Live, RP 
 | Punch in/out on a range | PT, CB, PX | ✓ (loop range, Cmd+Shift+P) |
 | Edit other tracks while recording | PT, CB, LV | ✓ (tested) |
 | Live recording waveform | all | ✓ |
-| Loop recording → takes | PT, CB, LV | ◐ engine records takes; take lanes UI in M2 |
-| Pre-roll / post-roll, count-in | PT, CB, LV | M2 |
+| Loop recording → takes on take lanes | PT, CB, LV | ✓ |
+| Pre-roll / post-roll, count-in | PT, CB, LV | ✓ (Settings → Editing & transport) |
 | QuickPunch / on-the-fly punch | PT | M2 |
 | Retrospective record (capture what you just played) | CB, LV | M2 |
 | Background / continuous safety recording | PX | M6 |
@@ -37,13 +37,15 @@ Source: PT = Pro Tools, PX = Pyramix, CB = Cubase/Nuendo, LV = Ableton Live, RP 
 | Reverse, mute, rename, colour | all | ✓ |
 | Every edit applies during playback and recording | all | ✓ (tested, 11–43 ms) |
 | Drag & drop from Finder at the drop point | all | ✓ |
-| Clip gain line (envelope) | PT, CB | M2 |
-| Playlists / take lanes and comping | PT, CB | M2 |
-| Source–destination 3- and 4-point editing | PX | M2 |
+| Clip gain line (envelope), drawn on the clip | PT, CB | ✓ (sample-accurate, tested) |
+| Take lanes and swipe comping, equal-power comp crossfades | PT, CB, LV | ✓ |
+| Heal separation, trim to cursor / selection | PT | ✓ |
+| Source–destination 3- and 4-point editing | PX | M2.5 |
 | Edit groups, VCA | PT, CB | M3 |
 | Strip silence, Tab-to-transient, hitpoints | PT, CB | M3 |
 | Clip groups | PT | M3 |
-| Elastic audio / AudioWarp / Live warp | PT, CB, LV | M3 |
+| Time stretch and pitch per clip (Rubber Band R3, Signalsmith, SoundTouch, varispeed); Opt-drag an edge (TCE) | PT, CB, LV | ✓ |
+| Warp markers inside a clip | PT, CB, LV | M3 |
 | Beat Detective / quantise audio | PT, CB | M3 |
 | Note-level editing of audio (VariAudio, RipX) | CB, RX | M4 |
 
@@ -62,8 +64,8 @@ Source: PT = Pro Tools, PX = Pyramix, CB = Cubase/Nuendo, LV = Ableton Live, RP 
 | Crossfade from a selection across a cut (equal power) | PT | ✓ |
 | Fade presets, user presets, "set as auto-fade shape" | CB, PT | ✓ |
 | Apply to all selected clips (batch fades) | PT | ✓ |
-| Crossfade editor with splice-point offset, asymmetric lengths | CB, PX | M2 |
-| Audition fade / crossfade with pre/post-roll | CB | M2 |
+| Crossfade editor with splice-point offset, pre/centre/post alignment, per-side curves | CB, PX | ✓ |
+| Audition crossfade with pre/post-roll | CB | ✓ |
 
 ## Mixing and routing
 
@@ -72,8 +74,10 @@ Source: PT = Pro Tools, PX = Pyramix, CB = Cubase/Nuendo, LV = Ableton Live, RP 
 | Channel strips: inserts, pan, fader, peak-hold meter, M/S/R | all | ✓ |
 | Master strip with inserts | all | ✓ |
 | AU / VST3 hosting, built-in EQ, compressor, reverb, delay, etc. | all | ✓ |
-| Plug-in delay compensation | all | ✓ (engine) |
-| Sends, aux returns, buses, subgroups | all | M2 |
+| Plug-in delay compensation, also when bypassed and across sends | all | ✓ (null-tested) |
+| Out-of-process plug-in scan (a crashing plug-in cannot take the app down) | LV, RP | ✓ |
+| Generic editors for built-in plug-ins; missing plug-ins flagged | all | ✓ |
+| Sends (pre/post fader), buses, subgroups, hardware outputs | all | ✓ |
 | Automation: read / write / touch / latch, lanes | PT, PX, CB | M3 |
 | Sidechain | all | M3 |
 | VCA faders | PT, CB | M3 |
@@ -89,7 +93,9 @@ Source: PT = Pro Tools, PX = Pyramix, CB = Cubase/Nuendo, LV = Ableton Live, RP 
 | Type any position anywhere (counter, Inspector, Spot) | PT, PX | ✓ |
 | Tempo and meter | all | ✓ (single tempo) |
 | Tempo map, ramps, meter changes | all | M3 |
-| Video track | PT, CB | M6 |
+| Video track: MOV, MP4, M4V, MXF, AVI, MKV, WebM; ProRes, DNxHD/HR, H.264, HEVC, MPEG-2, DV and more | PT, CB | ✓ |
+| Video export: ProRes Proxy–4444, DNxHR LB–444, H.264/HEVC (VideoToolbox), stream copy | PT, CB | ✓ |
+| Video sync offset, thumbnails, video window | PT | ✓ |
 | MTC / LTC sync | PT, PX | M6 |
 
 ## MIDI and instruments
@@ -106,7 +112,7 @@ Source: PT = Pro Tools, PX = Pyramix, CB = Cubase/Nuendo, LV = Ableton Live, RP 
 | Live transport (Space returns to insert marker, Shift+Space continues) | LV | ✓ |
 | Loop brace, follow playhead, metronome | all | ✓ |
 | Clip launcher (Session view) on the same clips | LV | M3 |
-| Markers / memory locations | PT, PX, CB | M2 |
+| Markers / memory locations, marker list | PT, PX, CB | ✓ |
 
 ## Analysis, restoration, decomposition
 
@@ -115,7 +121,7 @@ Source: PT = Pro Tools, PX = Pyramix, CB = Cubase/Nuendo, LV = Ableton Live, RP 
 | Stem separation | LV, RX | M4 |
 | Note decomposition with transparent-until-touched render | RX + Tonkori | M4 |
 | Spectral editing | CB (SpectraLayers), RX | M5 |
-| Loudness metering (LUFS, true peak) | PT, CB, PX | M2 |
+| Loudness metering: momentary, short-term, integrated, LRA, true peak (EBU R128 / BS.1770-4) | PT, CB, PX | ✓ (EBU 3341/3342 tested) |
 
 ## Delivery
 
@@ -123,7 +129,7 @@ Source: PT = Pro Tools, PX = Pyramix, CB = Cubase/Nuendo, LV = Ableton Live, RP 
 |---|---|---|
 | Export WAV 32f, or 24/16-bit with TPDF dither | all | ✓ |
 | Export time selection or whole session | all | ✓ |
-| Stem / multitrack export | all | M2 |
+| Stem / multitrack / bus export | all | ✓ (stems sum to the mix, tested) |
 | DDP / CD mastering | PX | M6 |
 | AAF / OMF interchange | PT, PX, CB | M6 |
 | ADM BWF | PX, PT | M6 |
@@ -141,7 +147,9 @@ Source: PT = Pro Tools, PX = Pyramix, CB = Cubase/Nuendo, LV = Ableton Live, RP 
 
 | Function | From | Status |
 |---|---|---|
-| Ableton Live 12 key map, native menu bar with shortcuts | LV | ✓ |
+| Shortcut sets: Ableton Live (default), Pro Tools, Logic Pro, Pyramix; every key editable | LV, PT, LG, PX | ✓ |
+| Full menu bar: File, Edit, Clip, Track, Markers, Tools, View, Transport | all | ✓ |
+| Latency report, loopback measurement, record offset | PX, RP | ✓ |
 | One undo step per gesture | all | ✓ |
 | Inspector: everything numeric and typeable | PX, CB | ✓ |
 | Session templates, track presets | PT, CB | M2 / M3 |

@@ -2,6 +2,7 @@
 
 #include <JuceHeader.h>
 #include "model/ClipFades.h"
+#include "model/GainLine.h"
 
 namespace te = tracktion;
 
@@ -30,6 +31,12 @@ namespace tonkori
         te::FadeOverride getFadeOverride (const te::AudioClipBase& clip, bool isFadeIn) override
         {
             return fades::resolve (clip, isFadeIn);
+        }
+
+        // Clip gain lines (engine patch 0002).
+        std::shared_ptr<const te::ClipGainEnvelope> getClipGainEnvelope (const te::AudioClipBase& clip) override
+        {
+            return gainline::envelopeFor (clip);
         }
 
         // %projectdir% resolves to the session's folder; takes go in "<Session> Audio/".

@@ -18,6 +18,18 @@
 #include "ui/Inspector.h"
 #include "ui/Mixer.h"
 #include "ui/FadeEditor.h"
+#include "ui/CrossfadeEditor.h"
+#include "ui/KeyProfiles.h"
+#include "ui/SettingsWindow.h"
+#include "ui/LoudnessMeter.h"
+#include "ui/VideoView.h"
+#include "PluginScanner.h"
+#include "model/GainLine.h"
+#include "model/Takes.h"
+#include "model/Crossfade.h"
+#include "model/Stretch.h"
+#include "model/Routing.h"
+#include "video/Video.h"
 
 using namespace tracktion::literals;
 
@@ -30,6 +42,11 @@ namespace Cmd
     {
         // File
         newSet = 0x2000, openSet, save, saveAs, exportAudio, importAudio, settings, pluginList, fullScreen,
+        importVideo, exportStems, exportVideo, removeVideo, videoWindow, shortcutSettings, latencySettings, loudnessWindow, markerList,
+        heal, trimStartToCursor, trimEndToCursor, trimToSelection, crossfadeEditor,
+        clipGainUp, clipGainDown, toggleGainLines, clearGainLine, resetStretch,
+        toggleLanes, promoteToMain, insertBus,
+        addMarker, prevMarker, nextMarker, preRollToggle, postRollToggle, countInToggle, insertMarkerToEnd, stopOnly,
         // Edit
         undo, redo, cut, copy, paste, duplicate, deleteSel, selectAll, clearSelection, rename,
         splitClip, insertSilence, deleteTime, createFades, deleteFades, reverseClip,
@@ -60,13 +77,28 @@ public:
     {
         tonkori::runJobWithProgressWindow (job);
     }
+
+    std::unique_ptr<juce::Component> createPluginWindow (te::PluginWindowState& pws) override
+    {
+        if (auto* ws = dynamic_cast<te::Plugin::WindowState*> (&pws))
+            if (auto* ext = dynamic_cast<te::ExternalPlugin*> (&ws->plugin); ext != nullptr && ext->getAudioPluginInstance() == nullptr)
+            {
+                juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Plug-in not loaded",
+                    ext->getName() + " could not be opened on this Mac.\n" + ext->getLoadError()
+                    + "\nIts settings are kept in the session; it plays through bypassed.");
+                return {};
+            }
+        return ExtendedUIBehaviour::createPluginWindow (pws);
+    }
 };
 
 //==============================================================================
 class MainComponent : public juce::Component,
                       public juce::ApplicationCommandTarget,
                       public juce::MenuBarModel,
-                      private juce::ChangeListener
+                      public tonkori::ui::SettingsHost,
+                      private juce::ChangeListener,
+                      private juce::Timer
 {
 public:
     MainComponent();
@@ -93,6 +125,21 @@ public:
     juce::PopupMenu getMenuForIndex (int, const juce::String&) override;
     void menuItemSelected (int, int) override {}
 
+    // SettingsHost
+    te::Engine& getEngine() override                      { return engine; }
+    te::Edit* getEdit() override                          { return edit.get(); }
+    juce::ApplicationCommandManager& getCommands() override { return commandManager; }
+    tonkori::keys::Profile getKeyProfile() override       { return keyProfile; }
+    void setKeyProfile (tonkori::keys::Profile p) override { applyKeyProfile (p, true); }
+    void saveKeyMappings() override;
+    void resetKeyMappings() override;
+    double getPreRoll() override                          { return preRollSeconds; }
+    void setPreRoll (double s) override                   { preRollSeconds = s; saveTransportPrefs(); }
+    double getPostRoll() override                         { return postRollSeconds; }
+    void setPostRoll (double s) override                  { postRollSeconds = s; saveTransportPrefs(); }
+    double getVideoOffsetMs() override;
+    void setVideoOffsetMs (double) override;
+
 private:
     tonkori::ui::LookAndFeel lookAndFeel;
     te::Engine engine { ProjectInfo::projectName, std::make_unique<TonkoriUIBehaviour>(),
@@ -117,6 +164,62 @@ private:
     std::optional<std::pair<double, double>> previousView;
 
     std::shared_ptr<juce::FileChooser> chooser;
+
+    // Shortcuts
+    tonkori::keys::Profile keyProfile = tonkori::keys::Profile::ableton;
+    void applyKeyProfile (tonkori::keys::Profile, bool loadUserChanges);
+    juce::PropertiesFile& props() { return engine.getPropertyStorage().getPropertiesFile(); }
+
+    // Transport extras
+    double preRollSeconds = 2.0, postRollSeconds = 1.0;
+    bool preRollOn = false, postRollOn = false;
+    std::optional<te::TimePosition> stopAt;
+    std::map<te::EditItemID, juce::Array<te::EditItemID>> clipsBeforeRecording;
+    void saveTransportPrefs();
+    void timerCallback() override;
+    void beginRecordingSnapshot();
+    void absorbNewRecordings();
+
+    // Windows
+    struct ToolWindow : public juce::DocumentWindow
+    {
+        ToolWindow (const juce::String& name, juce::Component* content, bool resizable, juce::KeyListener* shortcuts = nullptr)
+            : juce::DocumentWindow (name, tonkori::ui::colours::panel, juce::DocumentWindow::closeButton)
+        {
+            setUsingNativeTitleBar (true);
+            setContentOwned (content, true);
+            setResizable (resizable, false);
+            centreWithSize (getWidth(), getHeight());
+            if (shortcuts != nullptr) addKeyListener (shortcuts);     // transport and edit keys work from every window
+        }
+        void closeButtonPressed() override { setVisible (false); }
+    };
+    std::unique_ptr<ToolWindow> settingsWindow, loudnessWindow, videoWindow, markerWindow;
+    void showSettings (int tab);
+    void showLoudness();
+    void showMarkerList();
+
+    // Loudness
+    tonkori::ui::LoudnessHub loudnessHub;
+    tonkori::ui::OutputTap* outputTap = nullptr;
+    void updateTapChannels();
+
+    // Video
+    std::unique_ptr<tonkori::ui::ThumbnailCache> videoThumbs;
+    void importVideo();
+    void importVideoFile (const juce::File&);
+    void attachSessionVideo();
+    void showVideoWindow();
+    void spotVideo();
+    void removeVideo();
+    void exportVideo();
+
+    // Export
+    void exportStems();
+    juce::File renderRange (te::TimeRange, const juce::File& dest, int bits, juce::Array<te::Track*> tracks, bool masterPlugins);
+
+    // Inputs (MADI): mono channels by default, every input enabled, 32-bit float takes
+    void configureInputs (bool applyLayout);
 
     // Session
     static juce::File getSessionsFolder();
@@ -173,7 +276,18 @@ private:
     void soloSelectedTracks();
     void toggleTrackActive (int index);
     void openFadeEditor (te::AudioClipBase&, bool fadeIn, juce::Rectangle<int> screenArea);
+    void openCrossfadeEditor (te::AudioClipBase& outgoing, te::AudioClipBase& incoming);
+    void openCrossfadeForSelection();
     void spotClip (te::Clip&);
+    void healSelection();
+    void trimToCursor (bool start);
+    void trimToSelection();
+    void nudgeClipGain (double db);
+    void toggleLanesForSelection();
+    void promoteSelectionToMain();
+    void addMarkerAtCursor();
+    void jumpMarker (int direction);
+    juce::Array<te::Clip*> clipsForCommand() const;
 
     // View
     void zoom (double factor);

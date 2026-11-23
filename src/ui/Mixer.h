@@ -20,6 +20,7 @@ namespace tonkori::ui
     private:
         ViewState& vs;
         juce::Viewport viewport;
+        juce::TextButton addBus;
         juce::Component strips;
         juce::OwnedArray<ChannelStrip> channelStrips;
         std::unique_ptr<ChannelStrip> master;

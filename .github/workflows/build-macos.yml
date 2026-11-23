@@ -18,7 +18,7 @@ concurrency:
 jobs:
   build:
     runs-on: macos-15
-    timeout-minutes: 90
+    timeout-minutes: 150
 
     steps:
       - uses: actions/checkout@v4
@@ -30,8 +30,11 @@ jobs:
           path: libs
           key: deps-${{ hashFiles('deps.lock') }}
 
-      - name: Fetch pinned engine + JUCE, apply Tonkori patches
+      - name: Fetch pinned engine, JUCE and Rubber Band; apply Tonkori patches
         run: bash scripts/fetch-deps.sh
+
+      - name: Build FFmpeg for video (static, LGPL; cached after the first run)
+        run: bash scripts/build-ffmpeg.sh
 
       - name: Compiler cache
         uses: hendrikmuhs/ccache-action@v1.2
@@ -51,7 +54,7 @@ jobs:
       - name: Build
         run: cmake --build build --config Release --target TonkoriDAW TonkoriSelfTest -j 4
 
-      - name: Engine self-test (null test + DSD decode accuracy)
+      - name: Engine self-test (audio, editing, loudness, latency, video)
         run: |
           T=$(find build -name TonkoriSelfTest -type f -perm -u+x | head -1)
           "$T" 2>&1 | grep -vE "MIDI|^Audio|Rebuilding|Wave |Default Wave|Settings file|Creating Default|Cleaning up" | tee selftest.txt
@@ -93,6 +96,8 @@ jobs:
           body: |
             Apple Silicon build for macOS 13 (Ventura) and later.
             Commit: ${{ github.sha }}
+
+            selftest.txt is the engine test report from this exact build.
 
             First launch: unzip, move "Tonkori DAW" to Applications, open it once.
             If macOS blocks it, go to System Settings → Privacy & Security and click "Open Anyway".
